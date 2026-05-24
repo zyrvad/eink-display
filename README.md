@@ -1,8 +1,27 @@
 # E-Ink Gallery
-
+This repository describes the hardware and software setup required to create an E-Ink display. 
 Upload photos from your phone browser → they appear on the frame.
 
-## File structure
+## Hardware
+- Waveshare e-Paper module (this sample is using the 4.2 inch, V2 model)
+- ESP32 WROOM 32
+- Jumper wires
+
+### Wiring
+| Waveshare | ESP32         |
+| --------- | ------------- |
+| VCC       | 3.3V          |
+| GND       | GND           |
+| DIN       | D14           |
+| CLK       | D13           |
+| CS        | D15           |
+| DC        | D27           |
+| RST       | D26           |
+| BUSY      | D25           |
+
+## Software
+
+### File structure
 
 ```
 eink-gallery/
@@ -13,13 +32,14 @@ eink-gallery/
     (+ your Waveshare .h/.cpp files here too)
 ```
 
-## Setup steps
+### Setup steps
 
 ### 1. Arduino IDE setup
+Install **esp32** by Espressif Systems via Board Manager (Tools -> Board Manager)
 
 Install these libraries via Library Manager:
-- **ESPAsyncWebServer** by me-no-dev
-- **AsyncTCP** by me-no-dev  
+- **ESP Async WebServer** by ESP32Async
+- **Async TCP** by ESP32Async
 - **ArduinoJson** by Benoit Blanchon
 
 ### 2. Partition scheme
