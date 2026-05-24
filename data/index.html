@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ink frame</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Fraunces:ital,opsz,wght@0,9..144,200;0,9..144,300;1,9..144,200&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0e0e0e;
+    --paper: #f2efe8;
+    --paper2: #e8e4dc;
+    --accent: #1a1a1a;
+    --dim: #888880;
+    --border: #d0ccc4;
+    --red: #c0392b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 28px 40px 24px;
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+  }
+
+  .logo {
+    font-family: 'Fraunces', serif;
+    font-size: 2rem;
+    font-weight: 200;
+    font-style: italic;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .logo span {
+    font-style: normal;
+    font-weight: 300;
+    color: var(--dim);
+    font-size: 0.85rem;
+    font-family: 'DM Mono', monospace;
+    margin-left: 4px;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #aaa;
+    margin-left: auto;
+    transition: background 0.4s;
+  }
+  .status-dot.online { background: #2ecc71; box-shadow: 0 0 6px #2ecc7188; }
+  .status-dot.error  { background: var(--red); }
+
+  /* ── Layout ── */
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+  }
+
+  @media (max-width: 640px) {
+    main { grid-template-columns: 1fr; padding: 32px 20px; }
+    header { padding: 20px; }
+  }
+
+  /* ── Section label ── */
+  .section-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 16px;
+  }
+
+  /* ── Upload area ── */
+  .upload-section { grid-column: 1; }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 4px;
+    aspect-ratio: 4/3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    overflow: hidden;
+    background: var(--paper2);
+  }
+
+  .drop-zone:hover { border-color: var(--ink); }
+  .drop-zone.dragover { border-color: var(--ink); background: var(--border); }
+
+  .drop-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    opacity: 0.3;
+    line-height: 1;
+  }
+
+  .drop-text {
+    font-size: 0.7rem;
+    color: var(--dim);
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  .drop-zone canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+  }
+
+  /* Preview label overlay */
+  .preview-label {
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+    font-size: 0.6rem;
+    color: rgba(255,255,255,0.7);
+    background: rgba(0,0,0,0.5);
+    padding: 2px 6px;
+    border-radius: 2px;
+    display: none;
+  }
+
+  #file-input { display: none; }
+
+  /* ── Controls below drop zone ── */
+  .controls {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.65rem;
+    color: var(--dim);
+  }
+
+  .slider-row label { width: 72px; flex-shrink: 0; }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    cursor: pointer;
+  }
+
+  .slider-val { width: 28px; text-align: right; }
+
+  /* ── Upload button ── */
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    padding: 12px 20px;
+    border: 1.5px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.15s, color 0.15s;
+    width: 100%;
+    margin-top: 4px;
+  }
+  .btn:hover { background: transparent; color: var(--ink); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.secondary {
+    background: transparent;
+    color: var(--ink);
+  }
+  .btn.secondary:hover { background: var(--ink); color: var(--paper); }
+  .btn.danger { border-color: var(--red); background: var(--red); color: white; }
+  .btn.danger:hover { background: transparent; color: var(--red); }
+
+  /* ── Progress bar ── */
+  .progress-wrap {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    overflow: hidden;
+    display: none;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--ink);
+    width: 0%;
+    transition: width 0.2s;
+  }
+
+  /* ── Status message ── */
+  .msg {
+    font-size: 0.65rem;
+    color: var(--dim);
+    min-height: 1.2em;
+    text-align: center;
+  }
+  .msg.ok  { color: #27ae60; }
+  .msg.err { color: var(--red); }
+
+  /* ── Playlist ── */
+  .playlist-section { grid-column: 2; }
+
+  .playlist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .playlist-count {
+    font-size: 0.65rem;
+    color: var(--dim);
+  }
+
+  .playlist {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  .playlist::-webkit-scrollbar { width: 3px; }
+  .playlist::-webkit-scrollbar-track { background: transparent; }
+  .playlist::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--paper2);
+    transition: border-color 0.15s;
+    animation: slideIn 0.25s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .playlist-item.active {
+    border-color: var(--ink);
+    background: var(--paper);
+  }
+
+  .item-num {
+    font-size: 0.6rem;
+    color: var(--dim);
+    width: 18px;
+    flex-shrink: 0;
+  }
+
+  .item-thumb {
+    width: 40px;
+    height: 30px;
+    background: var(--border);
+    border-radius: 2px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .item-thumb canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+  }
+
+  .item-name {
+    flex: 1;
+    font-size: 0.65rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .item-badge {
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--ink);
+    color: var(--paper);
+    flex-shrink: 0;
+  }
+
+  .item-del {
+    font-size: 0.7rem;
+    color: var(--dim);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 2px;
+    transition: color 0.15s;
+    background: none;
+    border: none;
+    flex-shrink: 0;
+  }
+  .item-del:hover { color: var(--red); }
+
+  .empty-playlist {
+    font-size: 0.7rem;
+    color: var(--dim);
+    text-align: center;
+    padding: 48px 0;
+    border: 1.5px dashed var(--border);
+    border-radius: 4px;
+  }
+
+  /* ── Frame status panel ── */
+  .status-panel {
+    grid-column: 1 / -1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    background: var(--paper2);
+  }
+
+  .stat { display: flex; flex-direction: column; gap: 4px; }
+  .stat-val {
+    font-family: 'Fraunces', serif;
+    font-size: 1.5rem;
+    font-weight: 200;
+    color: var(--ink);
+  }
+  .stat-label { font-size: 0.6rem; color: var(--dim); letter-spacing: 0.08em; }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ink frame <span>v1.0</span></div>
+  <div id="status-dot" class="status-dot" title="Frame status"></div>
+</header>
+
+<main>
+
+  <!-- ── Upload ── -->
+  <section class="upload-section">
+    <div class="section-label">Add image</div>
+
+    <div class="drop-zone" id="drop-zone">
+      <div class="drop-icon">⬡</div>
+      <div class="drop-text">drop a photo here<br>or tap to browse</div>
+      <canvas id="preview-canvas"></canvas>
+      <div class="preview-label" id="preview-label">preview · 400×300</div>
+    </div>
+    <input type="file" id="file-input" accept="image/*">
+
+    <div class="controls">
+      <div class="slider-row">
+        <label>contrast</label>
+        <input type="range" id="contrast" min="80" max="220" value="160" step="5">
+        <span class="slider-val" id="contrast-val">1.6</span>
+      </div>
+      <div class="slider-row">
+        <label>sharpness</label>
+        <input type="range" id="sharpness" min="0" max="10" value="4" step="1">
+        <span class="slider-val" id="sharpness-val">mid</span>
+      </div>
+
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+
+      <button class="btn" id="upload-btn" disabled>send to frame</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </section>
+
+  <!-- ── Playlist ── -->
+  <section class="playlist-section">
+    <div class="playlist-header">
+      <div class="section-label" style="margin-bottom:0">on frame</div>
+      <span class="playlist-count" id="playlist-count">— images</span>
+    </div>
+    <div class="playlist" id="playlist">
+      <div class="empty-playlist">no images yet</div>
+    </div>
+  </section>
+
+  <!-- ── Status ── -->
+  <div class="status-panel">
+    <div class="stat">
+      <div class="stat-val" id="stat-images">—</div>
+      <div class="stat-label">images stored</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="stat-current">—</div>
+      <div class="stat-label">currently showing</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="stat-free">—</div>
+      <div class="stat-label">KB free</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const W = 400, H = 300;
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+const canvas     = document.getElementById('preview-canvas');
+const ctx        = canvas.getContext('2d');
+const uploadBtn  = document.getElementById('upload-btn');
+const msgEl      = document.getElementById('msg');
+const progressWrap = document.getElementById('progress-wrap');
+const progressBar  = document.getElementById('progress-bar');
+const previewLabel = document.getElementById('preview-label');
+
+canvas.width  = W;
+canvas.height = H;
+
+let processedBin = null;
+let currentFile  = null;
+
+// ── Sliders ────────────────────────────────────────────────────────────────
+const sharpLabels = ['off','low','low','mid','mid','mid','mid','high','high','high','max'];
+document.getElementById('contrast').addEventListener('input', e => {
+  document.getElementById('contrast-val').textContent = (e.target.value/100).toFixed(1);
+  if (currentFile) processImage(currentFile);
+});
+document.getElementById('sharpness').addEventListener('input', e => {
+  document.getElementById('sharpness-val').textContent = sharpLabels[e.target.value];
+  if (currentFile) processImage(currentFile);
+});
+
+// ── Drag & drop ────────────────────────────────────────────────────────────
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) handleFile(f);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+// ── Image processing ───────────────────────────────────────────────────────
+function handleFile(file) {
+  currentFile = file;
+  processImage(file);
+}
+
+function processImage(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => renderDithered(img);
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderDithered(img) {
+  // Smart crop to 4:3
+  const targetRatio = W / H;
+  let sx=0, sy=0, sw=img.width, sh=img.height;
+  const srcRatio = sw / sh;
+  if (srcRatio > targetRatio) {
+    sw = Math.round(sh * targetRatio);
+    sx = Math.round((img.width - sw) / 2);
+  } else {
+    sh = Math.round(sw / targetRatio);
+    sy = Math.round((img.height - sh) * 0.35);
+  }
+
+  // Draw to canvas at full res first
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+
+  // Get pixel data
+  let data = tctx.getImageData(0, 0, W, H);
+
+  // Contrast
+  const contrast = document.getElementById('contrast').value / 100;
+  applyContrast(data.data, contrast);
+
+  // Sharpness (unsharp mask approximation)
+  const sharpLevel = parseInt(document.getElementById('sharpness').value);
+  if (sharpLevel > 0) applySharpness(tctx, data, sharpLevel);
+  else tctx.putImageData(data, 0, 0);
+
+  data = tctx.getImageData(0, 0, W, H);
+
+  // To grayscale + Floyd-Steinberg dither
+  const gray = toGrayscale(data.data);
+  const dithered = floydSteinberg(gray, W, H);
+
+  // Render result
+  const out = ctx.createImageData(W, H);
+  for (let i = 0; i < dithered.length; i++) {
+    const v = dithered[i] ? 255 : 0;
+    out.data[i*4]   = v;
+    out.data[i*4+1] = v;
+    out.data[i*4+2] = v;
+    out.data[i*4+3] = 255;
+  }
+  ctx.putImageData(out, 0, 0);
+
+  // Pack to binary (Waveshare: 0=black, 1=white, MSB first)
+  processedBin = packBits(dithered, W, H);
+
+  canvas.style.display = 'block';
+  previewLabel.style.display = 'block';
+  dropZone.querySelector('.drop-icon').style.display = 'none';
+  dropZone.querySelector('.drop-text').style.display = 'none';
+  uploadBtn.disabled = false;
+  setMsg('');
+}
+
+function applyContrast(data, factor) {
+  const intercept = 128 * (1 - factor);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i]   = Math.min(255, Math.max(0, data[i]   * factor + intercept));
+    data[i+1] = Math.min(255, Math.max(0, data[i+1] * factor + intercept));
+    data[i+2] = Math.min(255, Math.max(0, data[i+2] * factor + intercept));
+  }
+}
+
+function applySharpness(tctx, imgData, level) {
+  tctx.putImageData(imgData, 0, 0);
+  // Simple unsharp mask via shadow blur trick
+  const amount = level * 0.12;
+  const tmp2 = document.createElement('canvas');
+  tmp2.width = W; tmp2.height = H;
+  const c2 = tmp2.getContext('2d');
+  c2.filter = `blur(${1 + level * 0.3}px)`;
+  c2.drawImage(tctx.canvas, 0, 0);
+  const blurred = c2.getImageData(0, 0, W, H);
+  const orig = imgData.data;
+  const blur = blurred.data;
+  const out = new ImageData(W, H);
+  for (let i = 0; i < orig.length; i += 4) {
+    out.data[i]   = Math.min(255,Math.max(0, orig[i]   + amount*(orig[i]   - blur[i])));
+    out.data[i+1] = Math.min(255,Math.max(0, orig[i+1] + amount*(orig[i+1] - blur[i+1])));
+    out.data[i+2] = Math.min(255,Math.max(0, orig[i+2] + amount*(orig[i+2] - blur[i+2])));
+    out.data[i+3] = 255;
+  }
+  tctx.putImageData(out, 0, 0);
+}
+
+function toGrayscale(data) {
+  const gray = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    gray[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
+  }
+  return gray;
+}
+
+function floydSteinberg(gray, w, h) {
+  const buf = new Float32Array(gray);
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const old = buf[i];
+      const nw  = old < 128 ? 0 : 255;
+      out[i] = nw === 255 ? 1 : 0;
+      const err = old - nw;
+      if (x+1 < w)           buf[i+1]     += err * 7/16;
+      if (y+1 < h && x > 0)  buf[i+w-1]   += err * 3/16;
+      if (y+1 < h)            buf[i+w]     += err * 5/16;
+      if (y+1 < h && x+1 < w) buf[i+w+1]  += err * 1/16;
+    }
+  }
+  return out;
+}
+
+function packBits(pixels, w, h) {
+  // Waveshare: 1=white, 0=black, MSB first
+  const bytes = new Uint8Array((w * h) / 8);
+  for (let i = 0; i < pixels.length; i += 8) {
+    let byte = 0;
+    for (let b = 0; b < 8; b++) {
+      if (pixels[i + b] === 1) byte |= (1 << (7 - b));
+    }
+    bytes[i / 8] = byte;
+  }
+  return bytes;
+}
+
+// ── Upload ─────────────────────────────────────────────────────────────────
+uploadBtn.addEventListener('click', async () => {
+  if (!processedBin) return;
+  uploadBtn.disabled = true;
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+  setMsg('uploading…');
+
+  const name = (currentFile.name.replace(/\.[^.]+$/, '') + '.bin')
+               .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  try {
+    await uploadBin(processedBin, name);
+    setMsg('done — image queued', 'ok');
+    progressBar.style.width = '100%';
+    setTimeout(() => { progressWrap.style.display = 'none'; }, 1000);
+    loadPlaylist();
+    loadStatus();
+  } catch(err) {
+    setMsg('upload failed: ' + err.message, 'err');
+    progressWrap.style.display = 'none';
+  }
+  uploadBtn.disabled = false;
+});
+
+function uploadBin(data, filename) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload');
+    xhr.setRequestHeader('X-Filename', filename);
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable)
+        progressBar.style.width = (e.loaded / e.total * 90) + '%';
+    };
+    xhr.onload = () => xhr.status === 200 ? resolve() : reject(new Error('HTTP ' + xhr.status));
+    xhr.onerror = () => reject(new Error('network error'));
+    xhr.send(data.buffer);
+  });
+}
+
+// ── Playlist ───────────────────────────────────────────────────────────────
+async function loadPlaylist() {
+  try {
+    const r = await fetch('/playlist');
+    const data = await r.json();
+    renderPlaylist(data);
+    document.getElementById('playlist-count').textContent =
+      data.images.length + ' image' + (data.images.length !== 1 ? 's' : '');
+  } catch { /* offline */ }
+}
+
+function renderPlaylist(data) {
+  const el = document.getElementById('playlist');
+  if (!data.images || data.images.length === 0) {
+    el.innerHTML = '<div class="empty-playlist">no images yet</div>';
+    return;
+  }
+  el.innerHTML = data.images.map((name, i) => `
+    <div class="playlist-item ${i === data.current ? 'active' : ''}">
+      <span class="item-num">${String(i+1).padStart(2,'0')}</span>
+      <div class="item-thumb"><canvas id="thumb-${i}" width="40" height="30"></canvas></div>
+      <span class="item-name">${name}</span>
+      ${i === data.current ? '<span class="item-badge">now</span>' : ''}
+      <button class="item-del" onclick="deleteImage('${name}')" title="remove">✕</button>
+    </div>
+  `).join('');
+}
+
+async function deleteImage(name) {
+  if (!confirm(`Remove "${name}" from the frame?`)) return;
+  try {
+    await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    loadPlaylist(); loadStatus();
+  } catch { setMsg('delete failed', 'err'); }
+}
+
+// ── Status ─────────────────────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const r = await fetch('/status');
+    const d = await r.json();
+    document.getElementById('stat-images').textContent  = d.count ?? '—';
+    document.getElementById('stat-current').textContent = d.current !== undefined ? '#' + (d.current+1) : '—';
+    document.getElementById('stat-free').textContent    = d.freeKB ? d.freeKB + ' KB' : '—';
+    document.getElementById('status-dot').className = 'status-dot online';
+  } catch {
+    document.getElementById('status-dot').className = 'status-dot error';
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function setMsg(text, type='') {
+  msgEl.textContent = text;
+  msgEl.className = 'msg' + (type ? ' '+type : '');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadPlaylist();
+loadStatus();
+setInterval(loadStatus, 15000);
+</script>
+</body>
+</html>
