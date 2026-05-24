@@ -24,8 +24,8 @@
 #include "GUI_Paint.h"
 
 // ── User config ──────────────────────────────────────────────────────────────
-const char* WIFI_SSID     = "sunoeyrock!";
-const char* WIFI_PASSWORD = "Oeydwarf123!";
+const char* WIFI_SSID     = "";
+const char* WIFI_PASSWORD = "";
 const char* HOSTNAME      = "eink-gallery";
 const int   DISPLAY_MINS  = 20;
 // ─────────────────────────────────────────────────────────────────────────────
