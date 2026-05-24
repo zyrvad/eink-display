@@ -42,6 +42,11 @@ Install these libraries via Library Manager:
 - **Async TCP** by ESP32Async
 - **ArduinoJson** by Benoit Blanchon
 
+Follow the official documentation for Waveshare and install the library from the following link: https://www.waveshare.com/wiki/E-Paper_ESP32_Driver_Board
+- Once installed the unzipped file `esp32-waveshare-epd` should be moved under ~/Arduino/libraries
+
+More general documentation for different microcontrollers can be found here: https://www.waveshare.com/wiki/4.2inch_e-Paper_Module_Manual?srsltid=AfmBOorC3uJt6WIOzAR03IcbcNYY6qKfUrVzAfDpQm8CcyQrHxyf6_mp#ESP32
+
 ### 2. Partition scheme
 
 Tools → Partition Scheme → **"Default 4MB with spiffs"**
@@ -68,14 +73,18 @@ Upload normally (Ctrl+U).
 Copy `data/index.html` into your sketch folder under a `data/` subfolder.
 Then: Tools → **ESP32 LittleFS Data Upload**
 
+**TO_FIX:** Plugin not really working so HTML is directly embedded in sketch
+
 ### 6. Use it
 
-Open http://eink-gallery.local on any device on your WiFi.
+Power the ESP32 board via USB-C cable.
+
+Open http://192.168.1.82 on any device on your WiFi.
 
 - Drop a photo onto the upload area
 - Adjust contrast/sharpness — you see a live dithered preview
 - Hit "send to frame"
-- The frame updates on its next cycle (default 30 min)
+- The frame updates on its next cycle
 
 ## How it works
 
