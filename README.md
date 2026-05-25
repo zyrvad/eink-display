@@ -66,6 +66,10 @@ const char* WIFI_SSID     = "your_network";
 const char* WIFI_PASSWORD = "your_password";
 const int   DISPLAY_MINS  = 30;
 ```
+The cycle time is no longer set in code — it is adjusted live from the web UI
+(see step 6) and stored on the device, so you only need to flash once.
+`DEFAULT_MINS` is only used the very first boot before any value has been saved.
+
 Upload normally (Ctrl+U).
 
 ### 5. Upload the web UI to LittleFS
@@ -74,17 +78,23 @@ Copy `data/index.html` into your sketch folder under a `data/` subfolder.
 Then: Tools → **ESP32 LittleFS Data Upload**
 
 **TO_FIX:** Plugin not really working so HTML is directly embedded in sketch
+The embedded copy in `eink_gallery.ino` and `data/index.html` are kept identical —
+if you edit one, edit the other.
 
 ### 6. Use it
 
 Power the ESP32 board via USB-C cable.
 
-Open http://192.168.1.82 on any device on your WiFi.
+Open http://192.168.1.83 or http://eink-gallery.local on any device on your WiFi.
 
 - Drop a photo onto the upload area
 - Adjust contrast/sharpness — you see a live dithered preview
 - Hit "send to frame"
 - The frame updates on its next cycle
+- Use the **cycle time** slider to change how often the frame advances —
+  the change is saved on the device and applies immediately
+- In the **on frame** list, use the ▲ / ▼ buttons to reorder images,
+  or ✕ to delete one
 
 ## How it works
 
