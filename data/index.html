@@ -321,6 +321,26 @@
     flex-shrink: 0;
   }
 
+  /* ── Reorder controls ── */
+  .item-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex-shrink: 0;
+  }
+  .item-move {
+    font-size: 0.55rem;
+    line-height: 1;
+    color: var(--dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 1px 3px;
+    transition: color 0.15s;
+  }
+  .item-move:hover:not(:disabled) { color: var(--ink); }
+  .item-move:disabled { opacity: 0.2; cursor: not-allowed; }
+
   .item-del {
     font-size: 0.7rem;
     color: var(--dim);
@@ -341,6 +361,28 @@
     padding: 48px 0;
     border: 1.5px dashed var(--border);
     border-radius: 4px;
+  }
+
+  /* ── Cycle-time settings panel ── */
+  .settings-panel {
+    grid-column: 1 / -1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: var(--paper2);
+  }
+  .settings-panel .section-label { flex-shrink: 0; }
+  .settings-panel input[type=range] { flex: 1; }
+  .interval-val {
+    font-family: 'Fraunces', serif;
+    font-size: 1.15rem;
+    font-weight: 200;
+    color: var(--ink);
+    min-width: 64px;
+    text-align: right;
   }
 
   /* ── Frame status panel ── */
@@ -369,7 +411,7 @@
 <body>
 
 <header>
-  <div class="logo">ink frame <span>v1.0</span></div>
+  <div class="logo">ink frame <span>v1.1</span></div>
   <div id="status-dot" class="status-dot" title="Frame status"></div>
 </header>
 
@@ -418,6 +460,13 @@
       <div class="empty-playlist">no images yet</div>
     </div>
   </section>
+
+  <!-- ── Cycle time ── -->
+  <div class="settings-panel">
+    <div class="section-label" style="margin-bottom:0">cycle time</div>
+    <input type="range" id="interval" min="1" max="120" value="20" step="1">
+    <span class="interval-val" id="interval-val">20 min</span>
+  </div>
 
   <!-- ── Status ── -->
   <div class="status-panel">
@@ -684,23 +733,72 @@ function renderPlaylist(data) {
     el.innerHTML = '<div class="empty-playlist">no images yet</div>';
     return;
   }
+  const last = data.images.length - 1;
   el.innerHTML = data.images.map((name, i) => `
     <div class="playlist-item ${i === data.current ? 'active' : ''}">
       <span class="item-num">${String(i+1).padStart(2,'0')}</span>
       <div class="item-thumb"><canvas id="thumb-${i}" width="40" height="30"></canvas></div>
       <span class="item-name">${name}</span>
       ${i === data.current ? '<span class="item-badge">now</span>' : ''}
+      <div class="item-controls">
+        <button class="item-move" ${i === 0 ? 'disabled' : ''}
+                onclick="moveImage(${i}, ${i-1})" title="move up">▲</button>
+        <button class="item-move" ${i === last ? 'disabled' : ''}
+                onclick="moveImage(${i}, ${i+1})" title="move down">▼</button>
+      </div>
       <button class="item-del" onclick="deleteImage('${name}')" title="remove">✕</button>
     </div>
   `).join('');
 }
 
+// Move an image to a new slot in the playlist (reorder).
+async function moveImage(from, to) {
+  try {
+    const r = await fetch(`/reorder?from=${from}&to=${to}`, { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    loadPlaylist();
+    loadStatus();
+  } catch { setMsg('reorder failed', 'err'); }
+}
+
 async function deleteImage(name) {
   if (!confirm(`Remove "${name}" from the frame?`)) return;
   try {
-    await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    const r = await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     loadPlaylist(); loadStatus();
   } catch { setMsg('delete failed', 'err'); }
+}
+
+// ── Cycle time ─────────────────────────────────────────────────────────────
+const intervalSlider = document.getElementById('interval');
+const intervalVal    = document.getElementById('interval-val');
+let   intervalTimer  = null;
+
+intervalSlider.addEventListener('input', () => {
+  intervalVal.textContent = intervalSlider.value + ' min';
+  // Debounce: only POST 0.5s after the user stops sliding.
+  clearTimeout(intervalTimer);
+  intervalTimer = setTimeout(saveInterval, 500);
+});
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/config');
+    const d = await r.json();
+    if (d.intervalMins) {
+      intervalSlider.value = d.intervalMins;
+      intervalVal.textContent = d.intervalMins + ' min';
+    }
+  } catch { /* offline */ }
+}
+
+async function saveInterval() {
+  try {
+    const r = await fetch('/config?mins=' + intervalSlider.value, { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    setMsg('cycle time set to ' + intervalSlider.value + ' min', 'ok');
+  } catch { setMsg('could not update cycle time', 'err'); }
 }
 
 // ── Status ─────────────────────────────────────────────────────────────────
@@ -726,6 +824,7 @@ function setMsg(text, type='') {
 // ── Init ───────────────────────────────────────────────────────────────────
 loadPlaylist();
 loadStatus();
+loadConfig();
 setInterval(loadStatus, 15000);
 </script>
 </body>
