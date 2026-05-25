@@ -11,6 +11,14 @@
  *
  * Waveshare files in sketch folder:
  *   DEV_Config.h/.cpp, EPD.h, EPD_4in2_V2.cpp, GUI_Paint.h/.cpp
+ *
+ * ── Changes in v1.1 ──────────────────────────────────────────────────────────
+ *   1. Frame resumes cycling immediately on boot / power reconnect
+ *      (previously it sat blank until an upload).
+ *   2. Cycle time is now adjustable live from the web UI (/config endpoint),
+ *      persisted in playlist.json — no re-flashing needed.
+ *   3. Delete fixed (correct `current` tracking, mutex-guarded screen clear)
+ *      and a new /reorder endpoint lets the playlist be reordered.
  */
 
 #include <Arduino.h>
@@ -27,16 +35,20 @@
 const char* WIFI_SSID     = "";
 const char* WIFI_PASSWORD = "";
 const char* HOSTNAME      = "eink-gallery";
-const int   DISPLAY_MINS  = 20;
+const int   DEFAULT_MINS  = 20;   // cycle time used the very first boot only;
+                                  // afterwards it is set from the web UI
 // ─────────────────────────────────────────────────────────────────────────────
 
 #define IMG_BYTES     15000
 #define PLAYLIST_PATH "/playlist.json"
 #define IMAGES_DIR    "/images"
+#define MIN_MINS      1
+#define MAX_MINS      1440
 
 AsyncWebServer server(80);
 
-// add this global near the top with your other globals
+// Set whenever the display task should wake early instead of finishing its
+// wait: a first upload to an empty queue, or a delete of the current image.
 volatile bool newImagePending = false;
 
 // ── Embedded HTML ─────────────────────────────────────────────────────────────
@@ -363,6 +375,26 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
     flex-shrink: 0;
   }
 
+  /* ── Reorder controls ── */
+  .item-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex-shrink: 0;
+  }
+  .item-move {
+    font-size: 0.55rem;
+    line-height: 1;
+    color: var(--dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 1px 3px;
+    transition: color 0.15s;
+  }
+  .item-move:hover:not(:disabled) { color: var(--ink); }
+  .item-move:disabled { opacity: 0.2; cursor: not-allowed; }
+
   .item-del {
     font-size: 0.7rem;
     color: var(--dim);
@@ -383,6 +415,28 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
     padding: 48px 0;
     border: 1.5px dashed var(--border);
     border-radius: 4px;
+  }
+
+  /* ── Cycle-time settings panel ── */
+  .settings-panel {
+    grid-column: 1 / -1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: var(--paper2);
+  }
+  .settings-panel .section-label { flex-shrink: 0; }
+  .settings-panel input[type=range] { flex: 1; }
+  .interval-val {
+    font-family: 'Fraunces', serif;
+    font-size: 1.15rem;
+    font-weight: 200;
+    color: var(--ink);
+    min-width: 64px;
+    text-align: right;
   }
 
   /* ── Frame status panel ── */
@@ -411,7 +465,7 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
 <body>
 
 <header>
-  <div class="logo">ink frame <span>v1.0</span></div>
+  <div class="logo">ink frame <span>v1.1</span></div>
   <div id="status-dot" class="status-dot" title="Frame status"></div>
 </header>
 
@@ -460,6 +514,13 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
       <div class="empty-playlist">no images yet</div>
     </div>
   </section>
+
+  <!-- ── Cycle time ── -->
+  <div class="settings-panel">
+    <div class="section-label" style="margin-bottom:0">cycle time</div>
+    <input type="range" id="interval" min="1" max="120" value="20" step="1">
+    <span class="interval-val" id="interval-val">20 min</span>
+  </div>
 
   <!-- ── Status ── -->
   <div class="status-panel">
@@ -726,23 +787,72 @@ function renderPlaylist(data) {
     el.innerHTML = '<div class="empty-playlist">no images yet</div>';
     return;
   }
+  const last = data.images.length - 1;
   el.innerHTML = data.images.map((name, i) => `
     <div class="playlist-item ${i === data.current ? 'active' : ''}">
       <span class="item-num">${String(i+1).padStart(2,'0')}</span>
       <div class="item-thumb"><canvas id="thumb-${i}" width="40" height="30"></canvas></div>
       <span class="item-name">${name}</span>
       ${i === data.current ? '<span class="item-badge">now</span>' : ''}
+      <div class="item-controls">
+        <button class="item-move" ${i === 0 ? 'disabled' : ''}
+                onclick="moveImage(${i}, ${i-1})" title="move up">▲</button>
+        <button class="item-move" ${i === last ? 'disabled' : ''}
+                onclick="moveImage(${i}, ${i+1})" title="move down">▼</button>
+      </div>
       <button class="item-del" onclick="deleteImage('${name}')" title="remove">✕</button>
     </div>
   `).join('');
 }
 
+// Move an image to a new slot in the playlist (reorder).
+async function moveImage(from, to) {
+  try {
+    const r = await fetch(`/reorder?from=${from}&to=${to}`, { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    loadPlaylist();
+    loadStatus();
+  } catch { setMsg('reorder failed', 'err'); }
+}
+
 async function deleteImage(name) {
   if (!confirm(`Remove "${name}" from the frame?`)) return;
   try {
-    await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    const r = await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     loadPlaylist(); loadStatus();
   } catch { setMsg('delete failed', 'err'); }
+}
+
+// ── Cycle time ─────────────────────────────────────────────────────────────
+const intervalSlider = document.getElementById('interval');
+const intervalVal    = document.getElementById('interval-val');
+let   intervalTimer  = null;
+
+intervalSlider.addEventListener('input', () => {
+  intervalVal.textContent = intervalSlider.value + ' min';
+  // Debounce: only POST 0.5s after the user stops sliding.
+  clearTimeout(intervalTimer);
+  intervalTimer = setTimeout(saveInterval, 500);
+});
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/config');
+    const d = await r.json();
+    if (d.intervalMins) {
+      intervalSlider.value = d.intervalMins;
+      intervalVal.textContent = d.intervalMins + ' min';
+    }
+  } catch { /* offline */ }
+}
+
+async function saveInterval() {
+  try {
+    const r = await fetch('/config?mins=' + intervalSlider.value, { method: 'POST' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    setMsg('cycle time set to ' + intervalSlider.value + ' min', 'ok');
+  } catch { setMsg('could not update cycle time', 'err'); }
 }
 
 // ── Status ─────────────────────────────────────────────────────────────────
@@ -768,6 +878,7 @@ function setMsg(text, type='') {
 // ── Init ───────────────────────────────────────────────────────────────────
 loadPlaylist();
 loadStatus();
+loadConfig();
 setInterval(loadStatus, 15000);
 </script>
 </body>
@@ -779,6 +890,7 @@ setInterval(loadStatus, 15000);
 struct Playlist {
     std::vector<String> images;
     int current = 0;
+    int intervalMins = DEFAULT_MINS;   // cycle time, adjustable from the web UI
 };
 
 Playlist playlist;
@@ -786,24 +898,29 @@ Playlist playlist;
 void loadPlaylist() {
     playlist.images.clear();
     playlist.current = 0;
+    playlist.intervalMins = DEFAULT_MINS;
     if (!LittleFS.exists(PLAYLIST_PATH)) return;
     File f = LittleFS.open(PLAYLIST_PATH, "r");
     if (!f) return;
     JsonDocument doc;
     if (deserializeJson(doc, f) != DeserializationError::Ok) { f.close(); return; }
     f.close();
-    playlist.current = doc["current"] | 0;
+    playlist.current      = doc["current"]  | 0;
+    playlist.intervalMins = doc["interval"] | DEFAULT_MINS;
+    if (playlist.intervalMins < MIN_MINS) playlist.intervalMins = MIN_MINS;
+    if (playlist.intervalMins > MAX_MINS) playlist.intervalMins = MAX_MINS;
     JsonArray arr = doc["images"].as<JsonArray>();
     for (JsonVariant v : arr) playlist.images.push_back(v.as<String>());
-    Serial.printf("[playlist] loaded %d images, current=%d\n",
-                  playlist.images.size(), playlist.current);
+    Serial.printf("[playlist] loaded %d images, current=%d, interval=%dmin\n",
+                  playlist.images.size(), playlist.current, playlist.intervalMins);
 }
 
 void savePlaylist() {
     File f = LittleFS.open(PLAYLIST_PATH, "w");
     if (!f) return;
     JsonDocument doc;
-    doc["current"] = playlist.current;
+    doc["current"]  = playlist.current;
+    doc["interval"] = playlist.intervalMins;
     JsonArray arr = doc["images"].to<JsonArray>();
     for (auto& name : playlist.images) arr.add(name);
     serializeJson(doc, f);
@@ -816,10 +933,26 @@ void addToPlaylist(const String& name) {
     savePlaylist();
 }
 
+// Remove an image and keep `current` pointing at the same picture it did
+// before (so a delete never silently changes what is on screen).
 void removeFromPlaylist(const String& name) {
     auto& v = playlist.images;
-    v.erase(std::remove(v.begin(), v.end(), name), v.end());
-    if (playlist.current >= (int)v.size() && !v.empty()) playlist.current = 0;
+    int idx = -1;
+    for (int i = 0; i < (int)v.size(); i++) {
+        if (v[i] == name) { idx = i; break; }
+    }
+    if (idx < 0) return;                 // not in the list
+
+    v.erase(v.begin() + idx);
+
+    if (idx < playlist.current) {
+        // an item *before* the current one was removed — shift the pointer
+        playlist.current--;
+    }
+    // if the current item itself (or beyond) was removed, clamp into range
+    if (playlist.current >= (int)v.size()) playlist.current = 0;
+    if (v.empty()) playlist.current = 0;
+
     savePlaylist();
 }
 
@@ -852,35 +985,57 @@ void showImage(const String& filename) {
     free(buf);
 }
 
+// Blank the panel (mutex-guarded so it can't collide with showImage()).
+void clearScreen() {
+    if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
+        EPD_4IN2_V2_Init();
+        EPD_4IN2_V2_Clear();
+        EPD_4IN2_V2_Sleep();
+        xSemaphoreGive(displayMutex);
+    }
+}
+
 // ── Display task (core 0) ─────────────────────────────────────────────────────
 
 void displayTask(void* param) {
     vTaskDelay(pdMS_TO_TICKS(3000));
+
     for (;;) {
-        // Wait for either the timer OR a new upload to trigger display
-        int waited = 0;
-        while (waited < DISPLAY_MINS * 60 * 1000) {
-            if (newImagePending) break;
+        // ── Show the current image right away ──
+        // This runs on every boot / power reconnect, so the frame resumes
+        // cycling immediately instead of waiting for a fresh upload.
+        if (!playlist.images.empty()) {
+            playlist.current = playlist.current % playlist.images.size();
+            String name = playlist.images[playlist.current];   // copy before showing
+            showImage(name);
+            savePlaylist();
+        } else {
+            Serial.println("[display] playlist empty, waiting for upload...");
+        }
+
+        // ── Wait out the cycle interval, or wake early on a signal ──
+        unsigned long waited = 0;
+        for (;;) {
+            // intervalMins is read live, so a change from the web UI takes
+            // effect even during the current wait.
+            unsigned long intervalMs =
+                (unsigned long)playlist.intervalMins * 60UL * 1000UL;
+
+            if (newImagePending) break;   // first upload, or current image deleted
+            if (!playlist.images.empty() && waited >= intervalMs) break;
+
             vTaskDelay(pdMS_TO_TICKS(1000));
             waited += 1000;
         }
 
-        if (!playlist.images.empty()) {
-            // If new image just arrived, jump to it (it was added to end)
-            if (newImagePending) {
-                newImagePending = false;
-                // Only jump to new image if it was the first one added
-                if (playlist.images.size() == 1) {
-                    playlist.current = 0;
-                }
-                // Otherwise it just queues up naturally, no disruption
-            }
-            playlist.current = playlist.current % playlist.images.size();
-            showImage(playlist.images[playlist.current]);
+        // ── Decide what to show next ──
+        if (newImagePending) {
+            // A first upload (current already 0) or a delete (which already
+            // repointed `current`) — just loop and re-show `current`.
+            newImagePending = false;
+        } else if (!playlist.images.empty()) {
+            // Normal timed advance to the next image in the rotation.
             playlist.current = (playlist.current + 1) % playlist.images.size();
-            savePlaylist();
-        } else {
-            Serial.println("[display] playlist empty, waiting...");
         }
     }
 }
@@ -911,29 +1066,72 @@ void setupServer() {
         req->send(200, "application/json", out);
     });
 
+    // ── Cycle-time config ──
+    server.on("/config", HTTP_GET, [](AsyncWebServerRequest* req) {
+        JsonDocument doc;
+        doc["intervalMins"] = playlist.intervalMins;
+        String out; serializeJson(doc, out);
+        req->send(200, "application/json", out);
+    });
+
+    server.on("/config", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!req->hasParam("mins")) { req->send(400); return; }
+        int m = req->getParam("mins")->value().toInt();
+        if (m < MIN_MINS) m = MIN_MINS;
+        if (m > MAX_MINS) m = MAX_MINS;
+        playlist.intervalMins = m;
+        savePlaylist();
+        Serial.printf("[config] cycle time set to %d min\n", m);
+        req->send(200, "application/json", "{\"ok\":true}");
+    });
+
+    // ── Reorder the playlist (move one image from index -> index) ──
+    server.on("/reorder", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!req->hasParam("from") || !req->hasParam("to")) { req->send(400); return; }
+        int from = req->getParam("from")->value().toInt();
+        int to   = req->getParam("to")->value().toInt();
+        auto& v = playlist.images;
+        if (from < 0 || from >= (int)v.size() ||
+            to   < 0 || to   >= (int)v.size()) {
+            req->send(400, "application/json", "{\"ok\":false}");
+            return;
+        }
+        if (from != to) {
+            // Remember which image is on screen so `current` follows it.
+            String showing = (playlist.current >= 0 &&
+                              playlist.current < (int)v.size())
+                              ? v[playlist.current] : String();
+            String moved = v[from];
+            v.erase(v.begin() + from);
+            v.insert(v.begin() + to, moved);
+            for (int i = 0; i < (int)v.size(); i++) {
+                if (v[i] == showing) { playlist.current = i; break; }
+            }
+            savePlaylist();
+        }
+        req->send(200, "application/json", "{\"ok\":true}");
+    });
+
     server.on("/delete", HTTP_DELETE, [](AsyncWebServerRequest* req) {
         if (!req->hasParam("name")) { req->send(400); return; }
         String name = req->getParam("name")->value();
 
-        // Check if we're deleting the currently showing image
+        // Is the image being deleted the one currently on screen?
         bool deletingCurrent = (!playlist.images.empty() &&
                                 playlist.current < (int)playlist.images.size() &&
                                 playlist.images[playlist.current] == name);
 
         LittleFS.remove(String(IMAGES_DIR) + "/" + name);
-        removeFromPlaylist(name);
+        removeFromPlaylist(name);                 // also fixes up `current`
         req->send(200, "application/json", "{\"ok\":true}");
 
-        // If we deleted what's currently on screen, show the next one immediately
         if (deletingCurrent) {
             if (!playlist.images.empty()) {
-                playlist.current = playlist.current % playlist.images.size();
-                newImagePending = true;   // wake the display task immediately
+                // Wake the display task to show whatever moved into place.
+                newImagePending = true;
             } else {
-                // Queue now empty — clear the screen
-                EPD_4IN2_V2_Init();
-                EPD_4IN2_V2_Clear();
-                EPD_4IN2_V2_Sleep();
+                // Queue is now empty — blank the panel.
+                clearScreen();
             }
         }
     });
@@ -957,8 +1155,13 @@ void setupServer() {
                 String name = req->header("X-Filename");
                 name.replace("..", ""); name.replace("/", "");
                 if (req->_tempFile) req->_tempFile.close();
+
+                bool wasEmpty = playlist.images.empty();
                 addToPlaylist(name);
-                newImagePending = true;
+                // Only wake the display task if the queue was empty before:
+                // an upload onto a non-empty queue just joins the rotation
+                // without disrupting whatever is currently showing.
+                if (wasEmpty) newImagePending = true;
                 Serial.println("[upload] done: " + name);
             }
         }
