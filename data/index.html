@@ -321,6 +321,7 @@
     flex-shrink: 0;
   }
 
+<<<<<<< HEAD
   /* ── Reorder controls ── */
   .item-controls {
     display: flex;
@@ -341,6 +342,8 @@
   .item-move:hover:not(:disabled) { color: var(--ink); }
   .item-move:disabled { opacity: 0.2; cursor: not-allowed; }
 
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
   .item-del {
     font-size: 0.7rem;
     color: var(--dim);
@@ -363,6 +366,7 @@
     border-radius: 4px;
   }
 
+<<<<<<< HEAD
   /* ── Cycle-time settings panel ── */
   .settings-panel {
     grid-column: 1 / -1;
@@ -385,6 +389,8 @@
     text-align: right;
   }
 
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
   /* ── Frame status panel ── */
   .status-panel {
     grid-column: 1 / -1;
@@ -411,7 +417,11 @@
 <body>
 
 <header>
+<<<<<<< HEAD
   <div class="logo">ink frame <span>v1.1</span></div>
+=======
+  <div class="logo">ink frame <span>v1.0</span></div>
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
   <div id="status-dot" class="status-dot" title="Frame status"></div>
 </header>
 
@@ -461,6 +471,7 @@
     </div>
   </section>
 
+<<<<<<< HEAD
   <!-- ── Cycle time ── -->
   <div class="settings-panel">
     <div class="section-label" style="margin-bottom:0">cycle time</div>
@@ -468,6 +479,8 @@
     <span class="interval-val" id="interval-val">20 min</span>
   </div>
 
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
   <!-- ── Status ── -->
   <div class="status-panel">
     <div class="stat">
@@ -733,24 +746,31 @@ function renderPlaylist(data) {
     el.innerHTML = '<div class="empty-playlist">no images yet</div>';
     return;
   }
+<<<<<<< HEAD
   const last = data.images.length - 1;
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
   el.innerHTML = data.images.map((name, i) => `
     <div class="playlist-item ${i === data.current ? 'active' : ''}">
       <span class="item-num">${String(i+1).padStart(2,'0')}</span>
       <div class="item-thumb"><canvas id="thumb-${i}" width="40" height="30"></canvas></div>
       <span class="item-name">${name}</span>
       ${i === data.current ? '<span class="item-badge">now</span>' : ''}
+<<<<<<< HEAD
       <div class="item-controls">
         <button class="item-move" ${i === 0 ? 'disabled' : ''}
                 onclick="moveImage(${i}, ${i-1})" title="move up">▲</button>
         <button class="item-move" ${i === last ? 'disabled' : ''}
                 onclick="moveImage(${i}, ${i+1})" title="move down">▼</button>
       </div>
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
       <button class="item-del" onclick="deleteImage('${name}')" title="remove">✕</button>
     </div>
   `).join('');
 }
 
+<<<<<<< HEAD
 // Move an image to a new slot in the playlist (reorder).
 async function moveImage(from, to) {
   try {
@@ -766,10 +786,17 @@ async function deleteImage(name) {
   try {
     const r = await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
+=======
+async function deleteImage(name) {
+  if (!confirm(`Remove "${name}" from the frame?`)) return;
+  try {
+    await fetch('/delete?name=' + encodeURIComponent(name), { method: 'DELETE' });
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
     loadPlaylist(); loadStatus();
   } catch { setMsg('delete failed', 'err'); }
 }
 
+<<<<<<< HEAD
 // ── Cycle time ─────────────────────────────────────────────────────────────
 const intervalSlider = document.getElementById('interval');
 const intervalVal    = document.getElementById('interval-val');
@@ -801,6 +828,8 @@ async function saveInterval() {
   } catch { setMsg('could not update cycle time', 'err'); }
 }
 
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
 // ── Status ─────────────────────────────────────────────────────────────────
 async function loadStatus() {
   try {
@@ -824,7 +853,10 @@ function setMsg(text, type='') {
 // ── Init ───────────────────────────────────────────────────────────────────
 loadPlaylist();
 loadStatus();
+<<<<<<< HEAD
 loadConfig();
+=======
+>>>>>>> 30623c8 (Update page upon changing which photo is being shown in the frame give an image thumbnail set theme for website (light and dark))
 setInterval(loadStatus, 15000);
 </script>
 </body>

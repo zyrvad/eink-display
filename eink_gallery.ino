@@ -71,6 +71,15 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
     --red: #c0392b;
   }
 
+  [data-theme="dark"] {
+    --ink: #e8e4dc;
+    --paper: #18170f;
+    --paper2: #201f17;
+    --dim: #7a7a70;
+    --border: #302f25;
+    --red: #e05444;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -112,7 +121,6 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
     width: 7px; height: 7px;
     border-radius: 50%;
     background: #aaa;
-    margin-left: auto;
     transition: background 0.4s;
   }
   .status-dot.online { background: #2ecc71; box-shadow: 0 0 6px #2ecc7188; }
@@ -460,12 +468,31 @@ const char INDEX_HTML[] PROGMEM = R"END(<!DOCTYPE html>
   }
   .stat-label { font-size: 0.6rem; color: var(--dim); letter-spacing: 0.08em; }
 
+  /* ── Theme toggle ── */
+  .theme-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    padding: 5px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-left: auto;
+    margin-right: 14px;
+    transition: color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+  }
+  .theme-btn:hover { color: var(--ink); border-color: var(--ink); }
+
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">ink frame <span>v1.1</span></div>
+  <div class="logo">ink frame <span>v1.2</span></div>
+  <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">◐ dark</button>
   <div id="status-dot" class="status-dot" title="Frame status"></div>
 </header>
 
@@ -558,6 +585,8 @@ canvas.height = H;
 
 let processedBin = null;
 let currentFile  = null;
+let lastKnownCurrent = -1;   // -1 = not yet set; used to detect photo advances
+const thumbCache = {};        // name → ImageData; avoids re-fetching on playlist refresh
 
 // ── Sliders ────────────────────────────────────────────────────────────────
 const sharpLabels = ['off','low','low','mid','mid','mid','mid','high','high','high','max'];
@@ -803,6 +832,46 @@ function renderPlaylist(data) {
       <button class="item-del" onclick="deleteImage('${name}')" title="remove">✕</button>
     </div>
   `).join('');
+  // Paint thumbnails (served as raw 1-bpp binary from the ESP32).
+  data.images.forEach((name, i) => loadThumb(name, i));
+}
+
+// ── Thumbnails ─────────────────────────────────────────────────────────────
+// Fetch /image?name=… (raw Waveshare 1-bpp binary, 400×300, 15 000 bytes),
+// decode it to a 40×30 ImageData (sampling every 10th pixel), and paint the
+// matching playlist canvas.  Results are cached so a playlist refresh caused
+// by a photo advance doesn't re-download anything.
+async function loadThumb(name, idx) {
+  if (thumbCache[name]) { renderThumb(thumbCache[name], idx); return; }
+  try {
+    const r = await fetch('/image?name=' + encodeURIComponent(name));
+    if (!r.ok) return;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    thumbCache[name] = decodeThumb(bytes);
+    renderThumb(thumbCache[name], idx);
+  } catch {}
+}
+
+function decodeThumb(bytes) {
+  // Waveshare packing: MSB-first, 1 = white, 0 = black.
+  // Downsample 400×300 → 40×30 by picking every 10th pixel.
+  const td = new ImageData(40, 30);
+  for (let ty = 0; ty < 30; ty++) {
+    for (let tx = 0; tx < 40; tx++) {
+      const li  = (ty * 10) * 400 + (tx * 10);
+      const isW = (bytes[li >> 3] >> (7 - (li & 7))) & 1;
+      const v   = isW ? 255 : 0;
+      const oi  = (ty * 40 + tx) * 4;
+      td.data[oi] = td.data[oi+1] = td.data[oi+2] = v;
+      td.data[oi+3] = 255;
+    }
+  }
+  return td;
+}
+
+function renderThumb(imgData, idx) {
+  const c = document.getElementById('thumb-' + idx);
+  if (c) c.getContext('2d').putImageData(imgData, 0, 0);
 }
 
 // Move an image to a new slot in the playlist (reorder).
@@ -864,6 +933,12 @@ async function loadStatus() {
     document.getElementById('stat-current').textContent = d.current !== undefined ? '#' + (d.current+1) : '—';
     document.getElementById('stat-free').textContent    = d.freeKB ? d.freeKB + ' KB' : '—';
     document.getElementById('status-dot').className = 'status-dot online';
+    // If the frame has advanced to a new image, refresh the playlist so the
+    // "now" badge and active highlight move to the correct row automatically.
+    if (d.current !== undefined) {
+      if (lastKnownCurrent !== -1 && d.current !== lastKnownCurrent) loadPlaylist();
+      lastKnownCurrent = d.current;
+    }
   } catch {
     document.getElementById('status-dot').className = 'status-dot error';
   }
@@ -875,7 +950,24 @@ function setMsg(text, type='') {
   msgEl.className = 'msg' + (type ? ' '+type : '');
 }
 
+// ── Theme ───────────────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = theme === 'dark' ? '◐ light' : '◐ dark';
+}
+
+function toggleTheme() {
+  const next = (document.documentElement.getAttribute('data-theme') || 'light') === 'dark'
+               ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem('eink-theme', next); } catch {}
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
+(function loadTheme() {
+  try { const s = localStorage.getItem('eink-theme'); if (s) applyTheme(s); } catch {}
+})();
 loadPlaylist();
 loadStatus();
 loadConfig();
@@ -1064,6 +1156,16 @@ void setupServer() {
         for (auto& n : playlist.images) arr.add(n);
         String out; serializeJson(doc, out);
         req->send(200, "application/json", out);
+    });
+
+    // ── Serve raw image binary so the browser can render thumbnails ──
+    server.on("/image", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!req->hasParam("name")) { req->send(400); return; }
+        String name = req->getParam("name")->value();
+        name.replace("..", ""); name.replace("/", "");   // sanitise
+        String path = String(IMAGES_DIR) + "/" + name;
+        if (!LittleFS.exists(path)) { req->send(404); return; }
+        req->send(LittleFS, path, "application/octet-stream");
     });
 
     // ── Cycle-time config ──
